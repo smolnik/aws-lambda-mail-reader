@@ -28,4 +28,4 @@ task buildZip(type: Zip) {
     }           
 }
 
-mainClassName = 'cloud.developing.router.Main'
+mainClassName = 'cloud.developing.main.Main'

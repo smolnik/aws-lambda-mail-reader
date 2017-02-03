@@ -29,6 +29,7 @@ import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.event.S3EventNotification.S3Entity;
 import com.amazonaws.services.sns.AmazonSNS;
 import com.amazonaws.services.sns.AmazonSNSClient;
+import com.amazonaws.services.sns.model.AmazonSNSException;
 import com.amazonaws.services.sns.model.PublishRequest;
 import com.google.common.base.Optional;
 import com.optimaize.langdetect.LanguageDetector;
@@ -58,7 +59,7 @@ public class MailReader {
 
 	}
 
-	private static final int MAX_CONTENT_LENGTH = 1000;
+	private static final int MAX_CONTENT_LENGTH = 500;
 
 	private static final String DEFAULT_LANGUAGE = "en";
 
@@ -69,6 +70,10 @@ public class MailReader {
 	private static final String MISSING_SUBJECT = S3_MAIL_READER_PREFIX + "/missing-subject.mp3";
 
 	private static final String MISSING_CONTENT = S3_MAIL_READER_PREFIX + "/missing-content.mp3";
+
+	private static final String CONTENT_ISSUE = S3_MAIL_READER_PREFIX + "/content-issue.mp3";
+
+	private static final String MAIL_ISSUE = S3_MAIL_READER_PREFIX + "/mail-issue.mp3";
 
 	private final String mobileAppTopic = System.getenv("mail_reader_mobile_app_topic");
 
@@ -116,13 +121,25 @@ public class MailReader {
 			String user = key.split("/")[1];
 			log.log("user: " + user);
 			Item userData = db.getTable("mail-reader-users").getItem("user", user);
-			VoiceUrls vu = processesMail(bucket, key);
-			String message = String.format("%s|%s|%s|%s", NEW_MESSAGE_MP3_URL, vu.fromMp3Url, vu.subjectMp3Url, vu.contentMp3Url);
 			String mobileEndpoint = mobileAppTopic + "/" + userData.getString("deviceId");
-			log.log("message: " + message);
-			log.log("mobileEndpoint: " + mobileEndpoint);
-			sns.publish(new PublishRequest().withTargetArn(mobileEndpoint).withMessage(message));
+			try {
+				VoiceUrls vus = processesMail(bucket, key);
+				String urls = String.format("%s|%s|%s|%s", NEW_MESSAGE_MP3_URL, vus.fromMp3Url, vus.subjectMp3Url, vus.contentMp3Url);
+				log.log("urls as sns message: " + urls);
+				log.log("mobileEndpoint: " + mobileEndpoint);
+				try {
+					sendToSns(urls, mobileEndpoint);
+				} catch (AmazonSNSException e) {
+					sendToSns(String.format("%s|%s|%s|%s", NEW_MESSAGE_MP3_URL, vus.fromMp3Url, vus.subjectMp3Url, CONTENT_ISSUE), mobileEndpoint);
+				}
+			} catch (Exception e) {
+				sendToSns(String.format("%s|%s", NEW_MESSAGE_MP3_URL, MAIL_ISSUE), mobileEndpoint);
+			}
 		});
+	}
+
+	private void sendToSns(String message, String mobileEndpoint) {
+		sns.publish(new PublishRequest().withTargetArn(mobileEndpoint).withMessage(message));
 	}
 
 	private VoiceUrls processesMail(String mailBucket, String mailKey) {
