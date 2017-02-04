@@ -2,6 +2,8 @@ package cloud.developing.mail;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
@@ -130,9 +132,11 @@ public class MailReader {
 				try {
 					sendToSns(urls, mobileEndpoint);
 				} catch (AmazonSNSException e) {
+					log.log(expToString(e));
 					sendToSns(String.format("%s|%s|%s|%s", NEW_MESSAGE_MP3_URL, vus.fromMp3Url, vus.subjectMp3Url, CONTENT_ISSUE), mobileEndpoint);
 				}
-			} catch (Exception e) {
+			} catch (RuntimeException re) {
+				log.log(expToString(re));
 				sendToSns(String.format("%s|%s", NEW_MESSAGE_MP3_URL, MAIL_ISSUE), mobileEndpoint);
 			}
 		});
@@ -142,13 +146,20 @@ public class MailReader {
 		sns.publish(new PublishRequest().withTargetArn(mobileEndpoint).withMessage(message));
 	}
 
+	private String expToString(Exception e) {
+		StringWriter errors = new StringWriter();
+		e.printStackTrace(new PrintWriter(errors));
+		return errors.toString();
+	}
+
 	private VoiceUrls processesMail(String mailBucket, String mailKey) {
 		try (InputStream is = s3.getObject(mailBucket, mailKey).getObjectContent()) {
 			MimeMessageParser parser = new MimeMessageParser(new MimeMessage(Session.getDefaultInstance(new Properties()), is));
 			parser.parse();
 			String from = parser.getFrom();
 			String subject = parser.getSubject();
-			String content = trimAndSanitizeContent(parser.getPlainContent());
+			String plainContent = parser.getPlainContent();
+			String content = trimAndSanitizeContent(plainContent);
 			String lang = detectLanguageBasedOn(subject, content);
 			String fromMp3Url = generateMp3Url(from, lang).get();
 			String subjectMp3Url = generateMp3Url(subject, lang).or(MISSING_SUBJECT);
@@ -181,17 +192,25 @@ public class MailReader {
 	}
 
 	private String trimAndSanitizeContent(String content) {
+		if (content == null) {
+			return null;
+		}
+
 		content = content.replaceAll("((mailto:|(news|(ht|f)tp(s?))://){1}\\S+)|\\[|\\]|", "").trim();
 		if (content.length() <= MAX_CONTENT_LENGTH) {
 			return content;
 		}
 		String[] ss = content.substring(0, MAX_CONTENT_LENGTH).split("\\b");
-		System.out.println(ss[ss.length - 3]);
 		return content.substring(0, MAX_CONTENT_LENGTH - ss[ss.length - 1].length());
 	}
 
 	private boolean isEmpty(String s) {
 		return s == null || s.trim().isEmpty();
+	}
+
+	public static void main(String[] args) {
+		MailReader mr = new MailReader();
+		mr.processesMail("developing.cloud", "emails/adam/4vqbp90hqlb0tqludmcs6bq5j5s1t5uhjd8c5v01");
 	}
 
 }
