@@ -31,7 +31,8 @@ import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.event.S3EventNotification.S3Entity;
 import com.amazonaws.services.sns.AmazonSNS;
 import com.amazonaws.services.sns.AmazonSNSClient;
-import com.amazonaws.services.sns.model.AmazonSNSException;
+import com.amazonaws.services.sns.model.InvalidParameterException;
+import com.amazonaws.services.sns.model.InvalidParameterValueException;
 import com.amazonaws.services.sns.model.PublishRequest;
 import com.google.common.base.Optional;
 import com.optimaize.langdetect.LanguageDetector;
@@ -131,7 +132,7 @@ public class MailReader {
 				log.log("mobileEndpoint: " + mobileEndpoint);
 				try {
 					sendToSns(urls, mobileEndpoint);
-				} catch (AmazonSNSException e) {
+				} catch (InvalidParameterException | InvalidParameterValueException e) {
 					log.log(exceptionToString(e));
 					sendToSns(String.format("%s|%s|%s|%s", NEW_MESSAGE_MP3_URL, vus.fromMp3Url, vus.subjectMp3Url, CONTENT_ISSUE), mobileEndpoint);
 				}
