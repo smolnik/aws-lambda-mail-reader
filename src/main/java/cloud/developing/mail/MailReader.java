@@ -132,11 +132,11 @@ public class MailReader {
 				try {
 					sendToSns(urls, mobileEndpoint);
 				} catch (AmazonSNSException e) {
-					log.log(expToString(e));
+					log.log(exceptionToString(e));
 					sendToSns(String.format("%s|%s|%s|%s", NEW_MESSAGE_MP3_URL, vus.fromMp3Url, vus.subjectMp3Url, CONTENT_ISSUE), mobileEndpoint);
 				}
 			} catch (RuntimeException re) {
-				log.log(expToString(re));
+				log.log(exceptionToString(re));
 				sendToSns(String.format("%s|%s", NEW_MESSAGE_MP3_URL, MAIL_ISSUE), mobileEndpoint);
 			}
 		});
@@ -146,7 +146,7 @@ public class MailReader {
 		sns.publish(new PublishRequest().withTargetArn(mobileEndpoint).withMessage(message));
 	}
 
-	private String expToString(Exception e) {
+	private String exceptionToString(Exception e) {
 		StringWriter errors = new StringWriter();
 		e.printStackTrace(new PrintWriter(errors));
 		return errors.toString();
@@ -159,7 +159,7 @@ public class MailReader {
 			String from = parser.getFrom();
 			String subject = parser.getSubject();
 			String plainContent = parser.getPlainContent();
-			String content = trimAndSanitizeContent(plainContent);
+			String content = trimAndSanitizeContent(plainContent).orNull();
 			String lang = detectLanguageBasedOn(subject, content);
 			String fromMp3Url = generateMp3Url(from, lang).get();
 			String subjectMp3Url = generateMp3Url(subject, lang).or(MISSING_SUBJECT);
@@ -178,6 +178,23 @@ public class MailReader {
 				.withVoiceId(voiceIdMap.getOrDefault(lang, defaultVoiceId)).withOutputFormat(OutputFormat.Mp3)).toString());
 	}
 
+	private Optional<LdLocale> detect(String content) {
+		return !isEmpty(content) ? ld.detect(content) : Optional.absent();
+	}
+
+	private Optional<String> trimAndSanitizeContent(String content) {
+		if (isEmpty(content)) {
+			return Optional.absent();
+		}
+
+		content = content.replaceAll("((mailto:|(news|(ht|f)tp(s?))://){1}\\S+)|\\[|\\]|", "").trim();
+		if (content.length() <= MAX_CONTENT_LENGTH) {
+			return Optional.of(content);
+		}
+		String[] ss = content.substring(0, MAX_CONTENT_LENGTH).split("\\b");
+		return Optional.of(content.substring(0, MAX_CONTENT_LENGTH - ss[ss.length - 1].length()));
+	}
+
 	private String detectLanguageBasedOn(String subject, String plainContent) {
 		Optional<LdLocale> lpc = detect(plainContent);
 		if (lpc.isPresent()) {
@@ -187,30 +204,8 @@ public class MailReader {
 		return ls.isPresent() ? ls.get().getLanguage() : DEFAULT_LANGUAGE;
 	}
 
-	private Optional<LdLocale> detect(String content) {
-		return !isEmpty(content) ? ld.detect(content) : Optional.absent();
-	}
-
-	private String trimAndSanitizeContent(String content) {
-		if (content == null) {
-			return null;
-		}
-
-		content = content.replaceAll("((mailto:|(news|(ht|f)tp(s?))://){1}\\S+)|\\[|\\]|", "").trim();
-		if (content.length() <= MAX_CONTENT_LENGTH) {
-			return content;
-		}
-		String[] ss = content.substring(0, MAX_CONTENT_LENGTH).split("\\b");
-		return content.substring(0, MAX_CONTENT_LENGTH - ss[ss.length - 1].length());
-	}
-
 	private boolean isEmpty(String s) {
 		return s == null || s.trim().isEmpty();
-	}
-
-	public static void main(String[] args) {
-		MailReader mr = new MailReader();
-		mr.processesMail("developing.cloud", "emails/adam/4vqbp90hqlb0tqludmcs6bq5j5s1t5uhjd8c5v01");
 	}
 
 }
