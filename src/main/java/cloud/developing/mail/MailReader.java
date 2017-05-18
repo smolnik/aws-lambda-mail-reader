@@ -21,7 +21,7 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.events.S3Event;
 import com.amazonaws.services.polly.AmazonPolly;
-import com.amazonaws.services.polly.AmazonPollyClient;
+import com.amazonaws.services.polly.AmazonPollyClientBuilder;
 import com.amazonaws.services.polly.model.DescribeVoicesRequest;
 import com.amazonaws.services.polly.model.OutputFormat;
 import com.amazonaws.services.polly.model.VoiceId;
@@ -30,7 +30,7 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.event.S3EventNotification.S3Entity;
 import com.amazonaws.services.sns.AmazonSNS;
-import com.amazonaws.services.sns.AmazonSNSClient;
+import com.amazonaws.services.sns.AmazonSNSClientBuilder;
 import com.amazonaws.services.sns.model.InvalidParameterException;
 import com.amazonaws.services.sns.model.InvalidParameterValueException;
 import com.amazonaws.services.sns.model.PublishRequest;
@@ -82,13 +82,13 @@ public class MailReader {
 
 	private final DynamoDB db = new DynamoDB(new AmazonDynamoDBClient());
 
-	private final AmazonSNS sns = new AmazonSNSClient();
+	private final AmazonSNS sns = AmazonSNSClientBuilder.defaultClient();
 
-	private final AmazonPolly polly = new AmazonPollyClient();
+	private final AmazonPolly polly = AmazonPollyClientBuilder.defaultClient();
 
 	private final AmazonS3 s3 = new AmazonS3Client();
 
-	private final VoiceId defaultVoiceId = VoiceId.Joanna;
+	private final String defaultVoiceId = VoiceId.Joanna.toString();
 
 	private final List<LanguageProfile> languageProfiles;
 
@@ -104,12 +104,12 @@ public class MailReader {
 
 	private final LanguageDetector ld = LanguageDetectorBuilder.create(NgramExtractors.standard()).withProfiles(languageProfiles).build();
 
-	private final ConcurrentMap<String, VoiceId> voiceIdMap = new ConcurrentHashMap<>();
+	private final ConcurrentMap<String, String> voiceIdMap = new ConcurrentHashMap<>();
 
 	{
 
 		polly.describeVoices(new DescribeVoicesRequest()).getVoices().forEach(v -> {
-			voiceIdMap.put(v.getLanguageCode().split("-")[0], VoiceId.fromValue(v.getId()));
+			voiceIdMap.put(v.getLanguageCode().split("-")[0], v.getId());
 		});
 
 	}
